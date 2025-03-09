@@ -2,17 +2,26 @@ import numpy as np
 import pandas as pd
 import json
 from shiny import App, reactive, render, req, ui
-from htmltools import HTML
+from htmltools import HTML, a
 
 from feedslist import load_feeds, parse_and_append, waiting_notif
+from functions import highlight
 
 with open("kept_rows.json", "r") as f: 
     saved_rows = json.load(f)
 
 app_ui =ui.page_sidebar(
         ui.sidebar(ui.input_action_button("reload", "Reload", class_="btn-success", width="80%"),
-                   ui.input_action_button("keep", "Keep link", class_="btn-warning", width="80%"),
-                   ui.output_ui("list_feeds"), 
+                   
+                   ui.accordion(  
+                        ui.accordion_panel("Feeds", 
+                                           ui.output_ui("list_feeds")),  
+                        ui.accordion_panel("Keywords", 
+                                           ui.output_ui("list_keywords")),   
+                        id="acc_sidebar",  
+                        open=["Feeds", "Keywords"]
+                    ),  
+                
                    bg="#f8f8f8", 
                    open="open"),
 
@@ -23,10 +32,7 @@ app_ui =ui.page_sidebar(
                                     ui.output_data_frame("df_all_feeds"),
                                     height="100%"
                                 ), 
-                                ui.card(  
-                                    ui.card_header("Description"),
-                                    ui.output_ui("description_display"),
-                                ), 
+                                ui.output_ui("description_display"),
                                 col_widths=(6, 6),
                                             ),
                             ),
@@ -94,28 +100,46 @@ def server(input, output, session):
                                 row_selection_mode="single",
                                 width="100%")
     
-    
     @reactive.Calc
-    def link_display():
+    def rval_url():
         req(input.df_all_feeds_selected_rows())
         selected_idx = list(input.df_all_feeds_selected_rows())
         print(selected_idx)
         link = filtered_table().iloc[selected_idx]["URL"].values[0]
-        link_displayed = HTML('<a href="' + link + '" target="_blank">Go to url</a>')
-        return link_displayed
-    
+        return link
+
+    @reactive.Calc
+    def rval_hypertext():
+        hypertext = HTML('<a href="' + rval_url() + '" target="_blank"><b>Go to url</b></a>')
+        return hypertext
+        
     @render.ui
     def description_display():
         req(input.df_all_feeds_selected_rows())
         selected_idx = list(input.df_all_feeds_selected_rows())
         print(selected_idx)
-        description = filtered_table().iloc[selected_idx]["Description_all"].values[0]
+        description_all = filtered_table().iloc[selected_idx]["Description_all"].values[0]
         try:
-            description = HTML(description + '<p>' + link_display())
+            # description = HTML(description)
+            tags = input.checkbox_keys()
+            description = highlight(tags, description_all)
         except:
-            description = HTML(link_display())
-        return description
-    
+            description = HTML(rval_hypertext())
+
+        description_card = ui.card( 
+            ui.card_header("Description"),
+            description,
+            ui.layout_columns(
+                a("Go to URL", class_="btn btn-success", href=rval_url(), target="_blank"),
+                ui.input_action_button("keep", "Keep link", class_="btn-warning", width="80%"),
+                width=1 / 2,
+                ),
+            full_screen=True, 
+            min_height="100%"
+
+        )
+        return description_card
+
     @render.ui
     def list_feeds():
         parsed_df = parsed_table()
@@ -140,6 +164,20 @@ def server(input, output, session):
             )
 
         return checkboxes_feeds
+    
+    @render.ui
+    def list_keywords():
+        with open("keywords.json", "r") as f: 
+            keywords = json.load(f)
+
+        checkboxes_keywords = ui.input_checkbox_group(  
+            id = "checkbox_keys",  
+            label = "List of feeds",  
+            choices = sorted(keywords),
+            selected = sorted(keywords)
+            )
+
+        return checkboxes_keywords
 
     @render.data_frame
     def df_new_feed():

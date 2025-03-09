@@ -31,5 +31,20 @@ def make_selected_dict():
         outfile.write(feeds)
     print("FILE WRITTEN")
 
-make_feed_dict()
-make_selected_dict()
+keywords = ["féminicide",
+            "homicide",
+            "crime passionnel",
+            "victime",
+            "corps d'une femme",
+            "ex-compagnon",
+            "ex-mari",
+            "femme"
+            ]
+
+def make_keywords_list():
+    list = json.dumps(keywords)
+    with open(app_dir + "/keywords.json", "w") as outfile:
+        outfile.write(list)
+    print("FILE WRITTEN")
+
+make_keywords_list()

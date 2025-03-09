@@ -12,16 +12,28 @@ class word_position():
         self.start = match.start()
         self.end = match.end()
 
+def detect_word(word, text):
+    res = text.find(word)
+    if res == -1:
+         positions = None
+    else:
+        positions = word_position(word, text)
+    
+    return positions
+     
+
         
-def highlight(tags, text):
+def highlight(keywords, text):
 
         highlighted_text = ""
         current_position = 0
 
-        for tag_list in tags: 
-            tag = tag_list[0] # mots
-            score = tag_list[1] # inutile
-            positions = word_position(tag, text) # récupérer position
+        for word in keywords: 
+            tag = word
+            positions = detect_word(tag, text)
+            if positions == None:
+                 continue
+            
             start_position = positions.start
             end_position = positions.end 
 
@@ -50,6 +62,9 @@ def highlight(tags, text):
         
         html_output = str(html_output).replace("\n", "</br>")
         
-        anonymized = HTML(html_output)
+        highlighted = HTML(html_output)
 
-        return anonymized
+        return highlighted
+
+pos = detect_word("salut", "salut bonjour")
+print(pos)
