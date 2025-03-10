@@ -5,12 +5,14 @@ from shiny import App, reactive, render, req, ui
 from htmltools import HTML, a
 from functions import highlight, load_feeds, parse_and_append, waiting_notif
 
-with open("kept_rows.json", "r") as f: 
-    saved_rows = json.load(f)
+try:
+    saved_rows = pd.read_json("kept_rows.json",
+                                orient = "records")
+except: 
+    saved_rows = None
 
 app_ui =ui.page_sidebar(
-        ui.sidebar(ui.input_action_button("reload", "Reload", class_="btn-success", width="80%"),
-                   
+        ui.sidebar(ui.input_action_button("reload", "Parse feeds", class_="btn-success", width="80%"), 
                    ui.accordion(  
                         ui.accordion_panel("Feeds", 
                                            ui.output_ui("list_feeds")),  
@@ -69,43 +71,50 @@ app_ui =ui.page_sidebar(
 
 def server(input, output, session):
 
-    parsed_df = load_feeds()
+    parsed_df = pd.read_json("all_data.json",
+                            orient = "records") # chargement initial des feeds
+
+    # valeurs réactives
 
     rval_parsed_table = reactive.Value(parsed_df)
-    rval_nloads = reactive.Value(int(0))
+    rval_nloads = reactive.Value(0)
     rval_filtered_table = reactive.Value() 
     rval_new_feed_name = reactive.Value("")
     rval_confirmation_delete = reactive.Value(0)
     rval_to_del_rss = reactive.Value("")
     rval_saved_links = reactive.Value(saved_rows)
     rval_saved_table = reactive.Value()
-
-    async def reload_df():
-        n = rval_nloads() + 1
-        df = load_feeds(int(n))
-        rval_parsed_table.set(df)
     
     @reactive.effect
     @reactive.event(input.reload)
     async def _():
         await waiting_notif(reload_df(), "Parsing feeds", "reload"+str(rval_nloads()))
 
+    async def reload_df():
+        n = rval_nloads() + 1
+        df = load_feeds(int(n))
+        rval_parsed_table.set(df)
+
     @render.data_frame
     def df_all_feeds():
         parsed_df = rval_parsed_table()
         feeds_selected = input.checkbox_feeds()
+
         with open('feeds_selected.json', 'w') as f:
             json.dump(feeds_selected, f)
-        print("json saved")
+        print("feeds_selected.json saved")
+
         df_feeds = parsed_df[parsed_df['Feed'].isin(feeds_selected)]
-        print(df_feeds)
         keywords_selected = list(input.checkbox_keys())
+
+        with open('keywords_selected.json', 'w') as f:
+            json.dump(keywords_selected, f)
+        print("keywords_selected.json saved")
+
         pattern  = "|".join(keywords_selected)
         df = df_feeds[df_feeds['Description'].str.contains(pattern,
                                                            case = False)]
-        print(df)
         rval_filtered_table.set(df)
-
         return render.DataGrid(df.iloc[:,[0,1,9]], 
                                 row_selection_mode="single",
                                 width="100%")
@@ -180,11 +189,21 @@ def server(input, output, session):
         with open("keywords.json", "r") as f: 
             keywords = json.load(f)
 
+        try:
+            with open("keywords_selected.json", "r") as f: 
+                keywords_selected = json.load(f)
+            print("json loaded")
+            
+        except:
+            keywords_selected = None
+
+        print(keywords_selected)
+
         checkboxes_keywords = ui.input_checkbox_group(  
             id = "checkbox_keys",  
             label = "List of feeds",  
             choices = sorted(keywords),
-            selected = sorted(keywords)
+            selected = sorted(keywords_selected)
             )
 
         return checkboxes_keywords
@@ -327,15 +346,14 @@ def server(input, output, session):
                     "Feed": row_kept[9]
                 }
         df.append(row_kept)
-        with open("kept_rows.json", "r") as f: 
-                saved_rows = json.load(f)
-        df.extend(saved_rows)
+        saved_rows = rval_saved_links()
+        if saved_rows != None:
+            df.extend(saved_rows)
         print(df)
-        with open("kept_rows.json", "w") as outfile: 
-            json.dump(df, outfile)
-
-        with open("kept_rows.json", "r") as f: 
-                saved_rows = json.load(f)
+        df = pd.DataFrame(df)
+        rval_saved_links.set(df)
+        df.to_json("kept_rows.json",
+                      orient="records")
 
         rval_saved_links.set(saved_rows)
         print("json saved")
