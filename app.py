@@ -3,9 +3,7 @@ import pandas as pd
 import json
 from shiny import App, reactive, render, req, ui
 from htmltools import HTML, a
-
-from feedslist import load_feeds, parse_and_append, waiting_notif
-from functions import highlight
+from functions import highlight, load_feeds, parse_and_append, waiting_notif
 
 with open("kept_rows.json", "r") as f: 
     saved_rows = json.load(f)
