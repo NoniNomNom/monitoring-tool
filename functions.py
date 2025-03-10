@@ -16,8 +16,16 @@ async def waiting_notif(task, message, id_notif): # show a notification popup to
                                 id=id_notif)
         await asyncio.sleep(0)
     ui.notification_remove(id=id_notif)
-    
 
+def detect_word(word, text):
+    res = text.find(word)
+    if res == -1:
+            positions = None
+    else:
+        positions = word_position(word, text)
+
+    return positions
+    
 def parse_and_append(feed_url, feed_name, error = 0, out_time = 0):
         parsed_feed = feedparser.parse(feed_url)
         parsed_entries = []
@@ -54,6 +62,7 @@ def parse_and_append(feed_url, feed_name, error = 0, out_time = 0):
                 print(formatted_date)
                 
                 formatted_date = str(formatted_date)
+
                 parsed_entries.append({
                     "Title": title,
                     "Date": formatted_date,
@@ -125,15 +134,6 @@ class word_position():
         match = re.search(word, text)
         self.start = match.start()
         self.end = match.end()
-
-def detect_word(word, text):
-    res = text.find(word)
-    if res == -1:
-         positions = None
-    else:
-        positions = word_position(word, text)
-    
-    return positions
      
 def highlight(keywords, text):
 

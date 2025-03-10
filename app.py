@@ -69,30 +69,42 @@ app_ui =ui.page_sidebar(
 
 def server(input, output, session):
 
-    nloads = reactive.Value(int(0))
     parsed_df = load_feeds()
-    parsed_table = reactive.Value(parsed_df)
-    filtered_table = reactive.Value() 
+
+    rval_parsed_table = reactive.Value(parsed_df)
+    rval_nloads = reactive.Value(int(0))
+    rval_filtered_table = reactive.Value() 
+    rval_new_feed_name = reactive.Value("")
+    rval_confirmation_delete = reactive.Value(0)
+    rval_to_del_rss = reactive.Value("")
+    rval_saved_links = reactive.Value(saved_rows)
+    rval_saved_table = reactive.Value()
 
     async def reload_df():
-        n = nloads() + 1
+        n = rval_nloads() + 1
         df = load_feeds(int(n))
-        parsed_table.set(df)
+        rval_parsed_table.set(df)
     
     @reactive.effect
     @reactive.event(input.reload)
     async def _():
-        await waiting_notif(reload_df(), "Parsing feeds", "reload"+str(nloads()))
+        await waiting_notif(reload_df(), "Parsing feeds", "reload"+str(rval_nloads()))
 
     @render.data_frame
     def df_all_feeds():
-        parsed_df = parsed_table()
+        parsed_df = rval_parsed_table()
         feeds_selected = input.checkbox_feeds()
         with open('feeds_selected.json', 'w') as f:
             json.dump(feeds_selected, f)
         print("json saved")
-        df = parsed_df[parsed_df['Feed'].isin(feeds_selected)]
-        filtered_table.set(df)
+        df_feeds = parsed_df[parsed_df['Feed'].isin(feeds_selected)]
+        print(df_feeds)
+        keywords_selected = list(input.checkbox_keys())
+        pattern  = "|".join(keywords_selected)
+        df = df_feeds[df_feeds['Description'].str.contains(pattern,
+                                                           case = False)]
+        print(df)
+        rval_filtered_table.set(df)
 
         return render.DataGrid(df.iloc[:,[0,1,9]], 
                                 row_selection_mode="single",
@@ -103,7 +115,7 @@ def server(input, output, session):
         req(input.df_all_feeds_selected_rows())
         selected_idx = list(input.df_all_feeds_selected_rows())
         print(selected_idx)
-        link = filtered_table().iloc[selected_idx]["URL"].values[0]
+        link = rval_filtered_table().iloc[selected_idx]["URL"].values[0]
         return link
 
     @reactive.Calc
@@ -116,7 +128,7 @@ def server(input, output, session):
         req(input.df_all_feeds_selected_rows())
         selected_idx = list(input.df_all_feeds_selected_rows())
         print(selected_idx)
-        description_all = filtered_table().iloc[selected_idx]["Description_all"].values[0]
+        description_all = rval_filtered_table().iloc[selected_idx]["Description_all"].values[0]
         try:
             # description = HTML(description)
             tags = input.checkbox_keys()
@@ -140,7 +152,7 @@ def server(input, output, session):
 
     @render.ui
     def list_feeds():
-        parsed_df = parsed_table()
+        parsed_df = rval_parsed_table()
         feeds = list(parsed_df["Feed"])
         feeds = np.array(feeds)
         feeds = np.unique(feeds)
@@ -186,15 +198,13 @@ def server(input, output, session):
             feed_name = parsed_feed.feed.get('title', 'Unknown')
             parsed_df = pd.DataFrame(parsed_entries)
             parsed_df["Feed"] = feed_name
-            new_feed_name.set(feed_name)
+            rval_new_feed_name.set(feed_name)
             parsed_df = parsed_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
             return render.DataGrid(parsed_df.iloc[:,[0,1,8,9]], 
                                     row_selection_mode="single",
                                     width="100%")
         except:
             return "Could not parse feed"
-    
-    new_feed_name = reactive.Value("")
     
     @reactive.effect
     @reactive.event(input.add_rss)
@@ -203,7 +213,7 @@ def server(input, output, session):
         m = ui.modal(
                 ui.card(ui.input_text("new_name", 
                                                 "Change name of feed",
-                                                value=new_feed_name(),
+                                                value=rval_new_feed_name(),
                                                 ),
                         ui.input_action_button("confirm_name", "Add feed")
                                 ),
@@ -225,7 +235,7 @@ def server(input, output, session):
             with open('feeds_dict.json', 'w') as f:
                 json.dump(feeds, f)
 
-            new_feed_name.set("")
+            rval_new_feed_name.set("")
             ui.notification_show("Feed added", 
                          duration=2, 
                          type="message",
@@ -245,18 +255,18 @@ def server(input, output, session):
     def feeds_to_del():
         with open("feeds_dict.json", "r") as f: 
             feeds = json.load(f)
-        if confirmation_delete() == 0:
+        if rval_confirmation_delete() == 0:
             ui_del = ui.TagList(
                         ui.input_select("feeds_titles_to_del", 
                             "Select a feed to delete", 
                             sorted(feeds["feed_title"])),
                         ui.input_action_button("del_rss", "Delete RSS feed", class_="btn-warning", width="50%"))
-        if confirmation_delete() == 1:
+        if rval_confirmation_delete() == 1:
             ui_del = ui.TagList(
                         ui.input_select("feeds_titles_to_del", 
                             "Select a feed to delete", 
                             sorted(feeds["feed_title"]),
-                            selected = to_del_rss()),
+                            selected = rval_to_del_rss()),
                         ui.input_action_button("del_rss", "Delete RSS feed", class_="btn-warning", width="50%"),
                         ui.input_action_button("del_rss_confirmation", "Confirm delete", class_="btn-danger", width="50%")
                         )
@@ -264,17 +274,14 @@ def server(input, output, session):
         
         return ui_del
     
-    confirmation_delete = reactive.Value(0)
-    to_del_rss = reactive.Value("")
-    
     @reactive.effect
     @reactive.event(input.del_rss)
     def _():
-        confirmation_delete.set(1)
+        rval_confirmation_delete.set(1)
         feed_to_del = input.feeds_titles_to_del()
-        to_del_rss.set(feed_to_del)
+        rval_to_del_rss.set(feed_to_del)
         print(feed_to_del)
-        print(confirmation_delete)
+        print(rval_confirmation_delete)
 
     @reactive.effect
     @reactive.event(input.del_rss_confirmation)
@@ -290,16 +297,13 @@ def server(input, output, session):
         with open("feeds_dict.json", "w") as outfile: 
             json.dump(feeds, outfile)
 
-        confirmation_delete.set(0)
-        to_del_rss.set("")
+        rval_confirmation_delete.set(0)
+        rval_to_del_rss.set("")
 
         with open("feeds_dict.json", "r") as f: 
             feeds = json.load(f)
 
         ui.update_select("feeds_titles_to_del", choices = sorted(feeds["feed_title"]))
-
-    saved_links = reactive.Value(saved_rows)
-    saved_table = reactive.Value()
 
     @reactive.effect
     @reactive.event(input.keep)
@@ -307,7 +311,7 @@ def server(input, output, session):
         req(input.df_all_feeds_selected_rows())
         selected_idx = list(input.df_all_feeds_selected_rows())
         print(selected_idx)
-        row_kept = list(filtered_table().iloc[selected_idx].values[0])
+        row_kept = list(rval_filtered_table().iloc[selected_idx].values[0])
         print(row_kept)
         df = []
         row_kept = {
@@ -333,15 +337,15 @@ def server(input, output, session):
         with open("kept_rows.json", "r") as f: 
                 saved_rows = json.load(f)
 
-        saved_links.set(saved_rows)
+        rval_saved_links.set(saved_rows)
         print("json saved")
 
     @render.data_frame
     def df_saved_links():
-        df = pd.DataFrame(saved_links())
+        df = pd.DataFrame(rval_saved_links())
         df = df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
         print(df)
-        saved_table.set(df)
+        rval_saved_table.set(df)
         return render.DataGrid(df.iloc[:,[0,1,9]], 
                                 row_selection_mode="single",
                                 width="100%")
@@ -351,7 +355,7 @@ def server(input, output, session):
         req(input.df_saved_links_selected_rows())
         selected_idx = list(input.df_saved_links_selected_rows())
         print(selected_idx)
-        link = saved_table().iloc[selected_idx]["URL"].values[0]
+        link = rval_saved_table().iloc[selected_idx]["URL"].values[0]
         link_displayed = HTML('<a href="' + link + '" target="_blank">Go to url</a>')
         return link_displayed
     
@@ -360,7 +364,7 @@ def server(input, output, session):
         req(input.df_saved_links_selected_rows())
         selected_idx = list(input.df_saved_links_selected_rows())
         print(selected_idx)
-        description = saved_table().iloc[selected_idx]["Description_all"].values[0]
+        description = rval_saved_table().iloc[selected_idx]["Description_all"].values[0]
         try:
             description = HTML(description + '<p>' + link_saved_display())
         except:
