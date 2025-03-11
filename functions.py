@@ -26,18 +26,25 @@ def detect_word(word, text):
 
     return positions
     
-def parse_and_append(feed_url, feed_name, error = 0, out_time = 0):
+def parse_and_append(all_data, feed_url, feed_name, error = 0, out_time = 0):
         parsed_feed = feedparser.parse(feed_url)
         parsed_entries = []
-        
-        back = datetime.now() - timedelta(days=10)
-
+   
+        back = datetime.now() - timedelta(days=5) # changer le nombre de jours si besoin
         
         entries = parsed_feed.entries if 'entries' in parsed_feed else []
         print(len(entries))
         
         for entry in entries:
             title = entry.title
+            try:
+                loaded_df = all_data[all_data["Feed"] == feed_name]
+                back = loaded_df["Date"].max()
+                print(back)
+
+            except:
+                 print("no past data")
+
             if not title:
                 print("NO TITLE")
                 error = error + 1
@@ -76,9 +83,16 @@ def parse_and_append(feed_url, feed_name, error = 0, out_time = 0):
                     "Feed": feed_name
                 })
 
-        return parsed_entries, parsed_feed
+        return parsed_entries
 
 def load_feeds(nloads = 0):
+
+    try:
+        all_data = pd.read_json("all_data.json",
+                                orient = "records")
+    except:
+            all_data = None
+            print("no df")
 
     with open("feeds_dict.json", "r") as f: 
         feeds = json.load(f)
@@ -100,7 +114,7 @@ def load_feeds(nloads = 0):
         feed_name = row['feed_title']
         print(feed_name)
         try:
-            parsed_entries, parsed_feed = parse_and_append(feed_url, feed_name)
+            parsed_entries = parse_and_append(all_data, feed_url, feed_name)
             parsed_table.extend(parsed_entries)
         except:
             feed_broken = feed_broken + 1
@@ -109,9 +123,11 @@ def load_feeds(nloads = 0):
         
     parsed_df = pd.DataFrame(parsed_table)
     print(parsed_df)
-    parsed_df = parsed_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
+    concat_df = pd.concat([all_data, parsed_df])
 
-    print(parsed_df)
+    concat_df = concat_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
+
+    print(concat_df)
     print("NUMBER OF ERRORS:")
     print(error)
     print("NUMBER OF OUT_TIME:")
@@ -120,9 +136,12 @@ def load_feeds(nloads = 0):
     print(feed_broken)
     print(feeds_broken)
 
+    concat_df.to_json("all_data.json",
+                      orient="records")
+
     ui.notification_remove(id="id_parsing"+str(nloads))
 
-    return parsed_df
+    return concat_df
 
 class word_position():
     def __init__(self, 
