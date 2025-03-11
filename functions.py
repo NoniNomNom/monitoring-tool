@@ -196,6 +196,3 @@ def highlight(keywords, text):
         highlighted = HTML(html_output)
 
         return highlighted
-
-pos = detect_word("salut", "salut bonjour")
-print(pos)
