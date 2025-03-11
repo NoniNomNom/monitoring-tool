@@ -15,3 +15,4 @@ https://docs.posit.co/shiny-server/ (documentation) <br>
 ## Pistes d'améliorations :
 - Fuzzy search : https://pypi.org/project/fuzzysearch/
 - Webscraping pour les sites sans flux RSS
+- Annotation du code
