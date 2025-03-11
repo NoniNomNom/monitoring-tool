@@ -9,5 +9,5 @@ https://code.visualstudio.com/docs/python/environments <br>
 
 ## Installation "propre" : 
 - Suivre ces instructions pour l'installation d'un serveur Shiny :<br>
-https://posit.co/download/shiny-server/ <br>
-https://docs.posit.co/shiny-server/ <br>
+https://posit.co/download/shiny-server/ (téléchargement et installation) <br>
+https://docs.posit.co/shiny-server/ (documentation) <br>
