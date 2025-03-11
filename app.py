@@ -5,12 +5,6 @@ from shiny import App, reactive, render, req, ui
 from htmltools import HTML, a
 from functions import highlight, load_feeds, parse_and_append, waiting_notif
 
-try:
-    saved_rows = pd.read_json("kept_rows.json",
-                                orient = "records")
-except: 
-    saved_rows = None
-
 app_ui =ui.page_sidebar(
         ui.sidebar(ui.input_action_button("reload", "Parse feeds", class_="btn-success", width="80%"), 
                    ui.accordion(  
@@ -70,6 +64,12 @@ app_ui =ui.page_sidebar(
 )
 
 def server(input, output, session):
+
+    try:
+        saved_rows = pd.read_json("kept_rows.json")
+        saved_rows = pd.DataFrame(saved_rows)
+    except: 
+        saved_rows = None
 
     parsed_df = pd.read_json("all_data.json",
                             orient = "records") # chargement initial des feeds
@@ -332,7 +332,7 @@ def server(input, output, session):
         print(selected_idx)
         row_kept = list(rval_filtered_table().iloc[selected_idx].values[0])
         print(row_kept)
-        df = []
+        df = rval_saved_links()
         row_kept = {
                     "Title": row_kept[0],
                     "Date": row_kept[1],
@@ -345,17 +345,12 @@ def server(input, output, session):
                     "Description": row_kept[8],
                     "Feed": row_kept[9]
                 }
-        df.append(row_kept)
-        saved_rows = rval_saved_links()
-        if saved_rows != None:
-            df.extend(saved_rows)
-        print(df)
-        df = pd.DataFrame(df)
-        rval_saved_links.set(df)
-        df.to_json("kept_rows.json",
+        row_kept = pd.DataFrame([row_kept])
+        concat_df = pd.concat([df, row_kept])
+        concat_df = concat_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
+        rval_saved_links.set(concat_df)
+        concat_df.to_json("kept_rows.json",
                       orient="records")
-
-        rval_saved_links.set(saved_rows)
         print("json saved")
 
     @render.data_frame
@@ -367,26 +362,55 @@ def server(input, output, session):
         return render.DataGrid(df.iloc[:,[0,1,9]], 
                                 row_selection_mode="single",
                                 width="100%")
-       
+
+
     @reactive.Calc
-    def link_saved_display():
+    def rval_saved_url():
         req(input.df_saved_links_selected_rows())
         selected_idx = list(input.df_saved_links_selected_rows())
         print(selected_idx)
         link = rval_saved_table().iloc[selected_idx]["URL"].values[0]
-        link_displayed = HTML('<a href="' + link + '" target="_blank">Go to url</a>')
-        return link_displayed
+        return link
+
+    @reactive.Calc
+    def rval_saved_hypertext():
+        hypertext = HTML('<a href="' + rval_saved_url() + '" target="_blank"><b>Go to url</b></a>')
+        return hypertext
     
     @render.ui
     def description_saved_display():
         req(input.df_saved_links_selected_rows())
         selected_idx = list(input.df_saved_links_selected_rows())
         print(selected_idx)
-        description = rval_saved_table().iloc[selected_idx]["Description_all"].values[0]
+        description_all = rval_saved_table().iloc[selected_idx]["Description_all"].values[0]
         try:
-            description = HTML(description + '<p>' + link_saved_display())
+            # description = HTML(description)
+            tags = input.checkbox_keys()
+            description = highlight(tags, description_all)
         except:
-            description = HTML(link_saved_display())
-        return description
+            description = HTML(rval_saved_hypertext())
+
+        description_card = ui.card( 
+            ui.card_header("Description"),
+            description,
+            ui.layout_columns(
+                a("Go to URL", class_="btn btn-success", href=rval_saved_url(), target="_blank"),
+                ui.input_action_button("delete_link", "Delete link", class_="btn-warning", width="80%"),
+                width=1 / 2,
+                ),
+            full_screen=True, 
+            min_height="100%"
+
+        )
+        return description_card
+
+    @reactive.effect
+    @reactive.event(input.delete_link)
+    async def _():
+        req(input.df_saved_links_selected_rows())
+        selected_idx = list(input.df_saved_links_selected_rows())
+        print(selected_idx[0])
+        # A CONTINUER
+
 
 app = App(app_ui, server)
