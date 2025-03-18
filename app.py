@@ -4,20 +4,23 @@ import json
 from shiny import App, reactive, render, req, ui
 from htmltools import HTML, a
 from functions import highlight, load_feeds, parse_and_append, waiting_notif
+from fuzzysearch import find_near_matches
 
 app_ui =ui.page_sidebar(
-        ui.sidebar(ui.input_action_button("reload", "Parse feeds", class_="btn-success", width="80%"), 
-                   ui.accordion(  
-                        ui.accordion_panel("Feeds", 
-                                           ui.output_ui("list_feeds")),  
-                        ui.accordion_panel("Keywords", 
-                                           ui.output_ui("list_keywords")),   
-                        id="acc_sidebar",  
-                        open=["Feeds", "Keywords"]
-                    ),  
-                
-                   bg="#f8f8f8", 
-                   open="open"),
+            ui.sidebar(
+                ui.input_action_button("reload", "Parse feeds", class_="btn-success", width="80%"), 
+                ui.accordion(  
+                    ui.accordion_panel("Feeds", 
+                                    ui.output_ui("list_feeds")),  
+                    ui.accordion_panel("Keywords", 
+                                    ui.output_ui("list_keywords"),
+                                    ),   
+                    id="acc_sidebar",  
+                    open=["Feeds", "Keywords"]
+                ),  
+            
+                bg="#f8f8f8", 
+                open="open"),
 
             ui.page_navbar( 
                 ui.nav_panel("RSS Feeds",                     
@@ -46,8 +49,10 @@ app_ui =ui.page_sidebar(
                 ui.nav_panel("Manage feeds",
                             ui.layout_columns(  
                                 ui.card(
-                                    ui.card(ui.input_text("feed_rss", "Add RSS feed"),
-                                        ui.input_action_button("add_rss", "Add RSS Feed to the list", class_="btn-success", width="50%")),
+                                    ui.card(
+                                        ui.input_text("feed_rss", "Add RSS feed"),
+                                        ui.input_action_button("add_rss", "Add RSS Feed to the list", class_="btn-success", width="50%")
+                                        ),
                                     ui.card(
                                         ui.output_ui("feeds_to_del")
                                         )
@@ -55,6 +60,17 @@ app_ui =ui.page_sidebar(
                                 ui.card(ui.output_data_frame("df_new_feed")),
                                 col_widths=(4, 8),  
                             ),
+                            ),
+                ui.nav_panel("Manage keywords",
+                                ui.card(
+                                    ui.card(
+                                        ui.input_text("new_keyword", "Add keyword"),
+                                        ui.input_action_button("add_keyword", "Add keyword", class_="btn-success", width="50%")
+                                        ),
+                                    ui.card(
+                                        ui.output_ui("keyword_to_del")
+                                        )
+                                    ),
                             ),
             title="Monitoring",  
             id="page",  
@@ -71,8 +87,11 @@ def server(input, output, session):
     except: 
         saved_rows = None
 
-    parsed_df = pd.read_json("all_data.json",
+    try:
+        parsed_df = pd.read_json("all_data.json",
                             orient = "records") # chargement initial des feeds
+    except:
+        parsed_df = pd.DataFrame()
 
     # valeurs réactives
 
@@ -84,6 +103,7 @@ def server(input, output, session):
     rval_to_del_rss = reactive.Value("")
     rval_saved_links = reactive.Value(saved_rows)
     rval_saved_table = reactive.Value()
+    rval_all_patterns = reactive.Value()
     
     @reactive.effect
     @reactive.event(input.reload)
@@ -104,15 +124,31 @@ def server(input, output, session):
             json.dump(feeds_selected, f)
         print("feeds_selected.json saved")
 
-        df_feeds = parsed_df[parsed_df['Feed'].isin(feeds_selected)]
+        if len(feeds_selected) > 0:
+            filtered_df = parsed_df[parsed_df['Feed'].isin(feeds_selected)]
+        else: filtered_df = parsed_df
         keywords_selected = list(input.checkbox_keys())
 
         with open('keywords_selected.json', 'w') as f:
             json.dump(keywords_selected, f)
         print("keywords_selected.json saved")
 
-        pattern  = "|".join(keywords_selected)
-        df = df_feeds[df_feeds['Description'].str.contains(pattern,
+        near_keys = []
+        for description in filtered_df['Description']:
+            for key in keywords_selected:
+                matches = find_near_matches(key, description, max_l_dist=0)
+                for match in matches:
+                    print(match)
+                    print(match.matched)
+                    near_keys.append(match.matched)
+
+        all_patterns = keywords_selected + near_keys
+        set_patterns = list(set(all_patterns))
+        rval_all_patterns.set(set_patterns)
+        pattern  = "|".join(set_patterns)
+        print(pattern)
+
+        df = filtered_df[filtered_df['Description'].str.contains(pattern,
                                                            case = False)]
         rval_filtered_table.set(df)
         return render.DataGrid(df.iloc[:,[0,1,9]], 
@@ -139,8 +175,7 @@ def server(input, output, session):
         print(selected_idx)
         description_all = rval_filtered_table().iloc[selected_idx]["Description_all"].values[0]
         try:
-            # description = HTML(description)
-            tags = input.checkbox_keys()
+            tags = rval_all_patterns()
             description = highlight(tags, description_all)
         except:
             description = HTML(rval_hypertext())
@@ -159,30 +194,7 @@ def server(input, output, session):
         )
         return description_card
 
-    @render.ui
-    def list_feeds():
-        parsed_df = rval_parsed_table()
-        feeds = list(parsed_df["Feed"])
-        feeds = np.array(feeds)
-        feeds = np.unique(feeds)
-        feeds = list(feeds)
-        try:
-            with open("feeds_selected.json", "r") as f: 
-                feeds_selected = json.load(f)
-            print("json loaded")
-            
-        except:
-            feeds_selected = None
-
-        print(feeds_selected)
-        checkboxes_feeds = ui.input_checkbox_group(  
-            id = "checkbox_feeds",  
-            label = "List of feeds",  
-            choices = sorted(feeds),
-            selected = feeds_selected
-            )
-
-        return checkboxes_feeds
+# KEYWORDS MANAGEMENT
     
     @render.ui
     def list_keywords():
@@ -201,12 +213,93 @@ def server(input, output, session):
 
         checkboxes_keywords = ui.input_checkbox_group(  
             id = "checkbox_keys",  
-            label = "List of feeds",  
+            label = "List of keywords",  
             choices = sorted(keywords),
             selected = sorted(keywords_selected)
             )
 
         return checkboxes_keywords
+    
+    @reactive.effect
+    @reactive.event(input.add_keyword)
+    def _():
+
+        with open("keywords.json", "r") as f: 
+            keys = json.load(f)
+
+        if input.new_keyword() != "":
+            keys.append(input.new_keyword())
+
+            with open('keywords.json', 'w') as f:
+                json.dump(keys, f)
+
+            ui.notification_show("Keyword added", 
+                         duration=2, 
+                         type="message",
+                         id="key_added")
+            ui.modal_remove()
+
+            try:
+                with open("keywords_selected.json", "r") as f: 
+                    keywords_selected = json.load(f)
+                print("json loaded")
+                
+            except:
+                keywords_selected = None
+
+            ui.update_checkbox_group(  
+                id = "checkbox_keys",  
+                label = "List of keywords",  
+                choices = sorted(keys),
+                selected=keywords_selected
+                )
+
+        else:
+            ui.modal_remove()
+            m = ui.modal(
+            "Impossible to add this keyword",
+            title=None,
+            easy_close=True,
+            footer=None)
+            ui.modal_show(m)
+    
+
+
+# FEEDS MANAGEMENT
+
+    @render.ui
+    def list_feeds():
+        try:
+            parsed_df = rval_parsed_table()
+            feeds = list(parsed_df["Feed"])
+            feeds = np.array(feeds)
+            feeds = np.unique(feeds)
+            feeds = list(feeds)
+            try:
+                with open("feeds_selected.json", "r") as f: 
+                    feeds_selected = json.load(f)
+                print("json loaded")
+                
+            except:
+                feeds_selected = None
+
+            print(feeds_selected)
+    
+            checkboxes_feeds = ui.input_checkbox_group(  
+                id = "checkbox_feeds",  
+                label = "List of feeds",  
+                choices = sorted(feeds),
+                selected = feeds_selected
+                )
+        except:
+            checkboxes_feeds = ui.input_checkbox_group(  
+                id = "checkbox_feeds",  
+                label = "No feed",  
+                choices = [],
+                selected = []
+                )
+    
+        return checkboxes_feeds
 
     @render.data_frame
     def df_new_feed():
@@ -274,6 +367,7 @@ def server(input, output, session):
     def feeds_to_del():
         with open("feeds_dict.json", "r") as f: 
             feeds = json.load(f)
+        
         if rval_confirmation_delete() == 0:
             ui_del = ui.TagList(
                         ui.input_select("feeds_titles_to_del", 
@@ -288,9 +382,7 @@ def server(input, output, session):
                             selected = rval_to_del_rss()),
                         ui.input_action_button("del_rss", "Delete RSS feed", class_="btn-warning", width="50%"),
                         ui.input_action_button("del_rss_confirmation", "Confirm delete", class_="btn-danger", width="50%")
-                        )
-
-        
+                        ) 
         return ui_del
     
     @reactive.effect
@@ -384,8 +476,7 @@ def server(input, output, session):
         print(selected_idx)
         description_all = rval_saved_table().iloc[selected_idx]["Description_all"].values[0]
         try:
-            # description = HTML(description)
-            tags = input.checkbox_keys()
+            tags = rval_all_patterns()
             description = highlight(tags, description_all)
         except:
             description = HTML(rval_saved_hypertext())
@@ -410,7 +501,11 @@ def server(input, output, session):
         req(input.df_saved_links_selected_rows())
         selected_idx = list(input.df_saved_links_selected_rows())
         print(selected_idx[0])
-        # A CONTINUER
+        df = rval_saved_links()
+        df = df.drop(index = selected_idx)
+        print(df)
+        rval_saved_links.set(df)
+        df.to_json("kept_rows.json")
 
 
 app = App(app_ui, server)

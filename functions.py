@@ -1,11 +1,14 @@
 import pandas as pd
+import requests
 import feedparser
 import json
 import re
 import asyncio
+from operator import attrgetter
 from datetime import datetime, timedelta
 from htmltools import HTML
 from shiny import ui
+from fuzzysearch import find_near_matches
 
 async def waiting_notif(task, message, id_notif): # show a notification popup to give a feedback
     loading_task = asyncio.create_task(task)
@@ -16,34 +19,35 @@ async def waiting_notif(task, message, id_notif): # show a notification popup to
                                 id=id_notif)
         await asyncio.sleep(0)
     ui.notification_remove(id=id_notif)
-
-def detect_word(word, text):
-    res = text.find(word)
-    if res == -1:
-            positions = None
-    else:
-        positions = word_position(word, text)
-
-    return positions
     
-def parse_and_append(all_data, feed_url, feed_name, error = 0, out_time = 0):
+def parse_and_append(feed_url, feed_name, all_data = None, error = 0, out_time = 0):
+        # if "download_rss_to_local:" in feed_url:
+        #     url = feed_url.replace("download_rss_to_local:", "")
+        #     print(url)
+        #     query_parameters = {"downloadformat": "rss"}
+        #     response = requests.get(url,
+        #                             query_parameters)
+        #     feed_url = "./rss/" + feed_name + ".xml"
+        #     with open(feed_url, "wb") as file:
+        #          file.write(response.content)
+
         parsed_feed = feedparser.parse(feed_url)
         parsed_entries = []
    
-        back = datetime.now() - timedelta(days=5) # changer le nombre de jours si besoin
+        back = datetime.now() - timedelta(days=30) # changer le nombre de jours si besoin
         
         entries = parsed_feed.entries if 'entries' in parsed_feed else []
         print(len(entries))
         
         for entry in entries:
             title = entry.title
-            try:
-                loaded_df = all_data[all_data["Feed"] == feed_name]
-                back = loaded_df["Date"].max()
-                print(back)
+            # try:
+            #     loaded_df = all_data[all_data["Feed"] == feed_name]
+            #     back = loaded_df["Date"].max()
+            #     print(back)
 
-            except:
-                 print("no past data")
+            # except:
+            #      print("no past data or all_data==None")
 
             if not title:
                 print("NO TITLE")
@@ -83,7 +87,7 @@ def parse_and_append(all_data, feed_url, feed_name, error = 0, out_time = 0):
                     "Feed": feed_name
                 })
 
-        return parsed_entries
+        return parsed_entries, parsed_feed
 
 def load_feeds(nloads = 0):
 
@@ -91,8 +95,8 @@ def load_feeds(nloads = 0):
         all_data = pd.read_json("all_data.json",
                                 orient = "records")
     except:
-            all_data = None
-            print("no df")
+        all_data = None
+        print("no df")
 
     with open("feeds_dict.json", "r") as f: 
         feeds = json.load(f)
@@ -114,20 +118,22 @@ def load_feeds(nloads = 0):
         feed_name = row['feed_title']
         print(feed_name)
         try:
-            parsed_entries = parse_and_append(all_data, feed_url, feed_name)
+            parsed_entries, parsed_feed = parse_and_append(feed_url, feed_name, all_data)
             parsed_table.extend(parsed_entries)
         except:
             feed_broken = feed_broken + 1
             feeds_broken.append(feed_name)
             continue
         
-    parsed_df = pd.DataFrame(parsed_table)
-    print(parsed_df)
-    concat_df = pd.concat([all_data, parsed_df])
+    # parsed_df = pd.DataFrame(parsed_table)
+    # print(parsed_df)
+    # final_df = pd.concat([all_data, parsed_df])
 
-    concat_df = concat_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
+    final_df = pd.DataFrame(parsed_table)
 
-    print(concat_df)
+    final_df = final_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
+
+    print(final_df)
     print("NUMBER OF ERRORS:")
     print(error)
     print("NUMBER OF OUT_TIME:")
@@ -136,12 +142,12 @@ def load_feeds(nloads = 0):
     print(feed_broken)
     print(feeds_broken)
 
-    concat_df.to_json("all_data.json",
+    final_df.to_json("all_data.json",
                       orient="records")
 
     ui.notification_remove(id="id_parsing"+str(nloads))
 
-    return concat_df
+    return final_df
 
 class word_position():
     def __init__(self, 
@@ -153,21 +159,44 @@ class word_position():
         match = re.search(word, text)
         self.start = match.start()
         self.end = match.end()
+
+def detect_word(word, text):
+    res = text.find(word)
+    if res == -1:        
+        positions = None
+    else:
+        positions = word_position(word, text)
+
+    return positions
      
 def highlight(keywords, text):
 
         highlighted_text = ""
         current_position = 0
 
+        words_df = pd.DataFrame()
+
         for word in keywords: 
             tag = word
             positions = detect_word(tag, text)
-            if positions == None:
-                 continue
-            
-            start_position = positions.start
-            end_position = positions.end 
 
+            if positions == None:
+                pass
+            else:
+                new_row = pd.DataFrame({'word' : [positions.word],
+                                        'start': [positions.start],
+                                        'end': [positions.end]})
+                words_df = pd.concat([words_df, new_row], 
+                                     ignore_index=True)
+
+        df = words_df.sort_values(by=['start'])
+        print(df)
+
+        for i in range(0, len(df)):
+
+            start_position = df.iloc[i]['start']
+            end_position = df.iloc[i]['end']
+            
             color = "#fedda2"
 
             segment = text[current_position:start_position]
