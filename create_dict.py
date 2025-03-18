@@ -8,7 +8,7 @@ app_dir = str(app_dir)
 
 feeds_dict = {}
 
-feeds_dict["feed_title"] = ["Le Soir - Une",
+feeds_dict["feed_title"] = [
                             "La Libre - Derniers",
                             "RTBF - Général",
                             "RTBF - Local",
@@ -29,7 +29,7 @@ feeds_dict["feed_title"] = ["Le Soir - Une",
 
 ]
 
-feeds_dict["feed_url"] = ["./rss/lesoir_une.xml",
+feeds_dict["feed_url"] = [
                           "https://www.lalibre.be/arc/outboundfeeds/rss/?outputType=xml",
                           "https://rss.rtbf.be/article/rss/highlight_rtbf_info.xml",
                           "https://rss.rtbf.be/article/rss/highlight_rtbfinfo_info-regions.xml",
