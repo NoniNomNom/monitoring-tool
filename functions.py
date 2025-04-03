@@ -1,14 +1,8 @@
 import pandas as pd
-import requests
-import feedparser
-import json
 import re
 import asyncio
-from operator import attrgetter
-from datetime import datetime, timedelta
 from htmltools import HTML
 from shiny import ui
-from fuzzysearch import find_near_matches
 
 async def waiting_notif(task, message, id_notif): # show a notification popup to give a feedback
     loading_task = asyncio.create_task(task)
@@ -19,135 +13,6 @@ async def waiting_notif(task, message, id_notif): # show a notification popup to
                                 id=id_notif)
         await asyncio.sleep(0)
     ui.notification_remove(id=id_notif)
-    
-def parse_and_append(feed_url, feed_name, all_data = None, error = 0, out_time = 0):
-        # if "download_rss_to_local:" in feed_url:
-        #     url = feed_url.replace("download_rss_to_local:", "")
-        #     print(url)
-        #     query_parameters = {"downloadformat": "rss"}
-        #     response = requests.get(url,
-        #                             query_parameters)
-        #     feed_url = "./rss/" + feed_name + ".xml"
-        #     with open(feed_url, "wb") as file:
-        #          file.write(response.content)
-
-        parsed_feed = feedparser.parse(feed_url)
-        parsed_entries = []
-   
-        back = datetime.now() - timedelta(days=30) # changer le nombre de jours si besoin
-        
-        entries = parsed_feed.entries if 'entries' in parsed_feed else []
-        print(len(entries))
-        
-        for entry in entries:
-            title = entry.title
-            # try:
-            #     loaded_df = all_data[all_data["Feed"] == feed_name]
-            #     back = loaded_df["Date"].max()
-            #     print(back)
-
-            # except:
-            #      print("no past data or all_data==None")
-
-            if not title:
-                print("NO TITLE")
-                error = error + 1
-                continue
-            else :
-                date = entry.published_parsed if 'published_parsed' in entry else None
-                if date and datetime(*date[:6]) < back or date == None:
-                    print("OUT OF TIME")
-                    out_time = out_time + 1
-                    continue
-                url = entry.link if 'link' in entry else None
-                description = entry.summary if 'summary' in entry else None
-                words = re.sub('<[^<]+?>', '', description)
-                words = str(words).split()
-                description_short = ' '.join(words[:15])
-                formatted_date = datetime.strftime(datetime(*date[:6]), "%d-%m-%Y - %H:%M") if date else None
-                formatted_day = datetime.strftime(datetime(*date[:6]), "%d") if date else None
-                formatted_month = datetime.strftime(datetime(*date[:6]), "%m") if date else None
-                formatted_year = datetime.strftime(datetime(*date[:6]), "%Y") if date else None
-                formatted_hour = datetime.strftime(datetime(*date[:6]), "%H:%M") if date else None
-
-                print(formatted_date)
-                
-                formatted_date = str(formatted_date)
-
-                parsed_entries.append({
-                    "Title": title,
-                    "Date": formatted_date,
-                    "Day": int(formatted_day),
-                    "Month": int(formatted_month),
-                    "Year": int(formatted_year),
-                    "Hour": formatted_hour,
-                    "URL": url,
-                    "Description_all": description,
-                    "Description": description_short,
-                    "Feed": feed_name
-                })
-
-        return parsed_entries, parsed_feed
-
-def load_feeds(nloads = 0):
-
-    try:
-        all_data = pd.read_json("all_data.json",
-                                orient = "records")
-    except:
-        all_data = None
-        print("no df")
-
-    with open("feeds_dict.json", "r") as f: 
-        feeds = json.load(f)
-
-    df_feeds = pd.DataFrame(feeds)
-    parsed_table = []
-    error = 0
-    out_time = 0
-    feed_broken = 0
-    feeds_broken = []
-
-    ui.notification_show("Parsing feeds", 
-                        duration=120, 
-                        type="message",
-                        id="id_parsing"+str(nloads))
-
-    for index, row in df_feeds.iterrows():
-        feed_url = row['feed_url']
-        feed_name = row['feed_title']
-        print(feed_name)
-        try:
-            parsed_entries, parsed_feed = parse_and_append(feed_url, feed_name, all_data)
-            parsed_table.extend(parsed_entries)
-        except:
-            feed_broken = feed_broken + 1
-            feeds_broken.append(feed_name)
-            continue
-        
-    # parsed_df = pd.DataFrame(parsed_table)
-    # print(parsed_df)
-    # final_df = pd.concat([all_data, parsed_df])
-
-    final_df = pd.DataFrame(parsed_table)
-
-    final_df = final_df.sort_values(by=['Year', 'Month', 'Day', 'Hour'], ascending=False)
-
-    print(final_df)
-    print("NUMBER OF ERRORS:")
-    print(error)
-    print("NUMBER OF OUT_TIME:")
-    print(out_time)
-    print("FEEDS BROKEN:")
-    print(feed_broken)
-    print(feeds_broken)
-
-    final_df.to_json("all_data.json",
-                      orient="records")
-
-    ui.notification_remove(id="id_parsing"+str(nloads))
-
-    return final_df
 
 class word_position():
     def __init__(self, 
@@ -161,14 +26,16 @@ class word_position():
         self.end = match.end()
 
 def detect_word(word, text):
-    res = text.find(word)
+    lower_text = text.lower()
+    lower_word = word.lower()
+    res = lower_text.find(lower_word)
     if res == -1:        
         positions = None
     else:
-        positions = word_position(word, text)
+        positions = word_position(lower_word, lower_text)
 
     return positions
-     
+    
 def highlight(keywords, text):
 
         highlighted_text = ""
@@ -225,3 +92,19 @@ def highlight(keywords, text):
         highlighted = HTML(html_output)
 
         return highlighted
+
+def highlight_from_selected_row(input, df, patterns):
+    selected_idx = list(input)
+    print(selected_idx)
+    title = df.iloc[selected_idx]["Title"].values[0]
+    description = df.iloc[selected_idx]["Description_all"].values[0]
+    description = description.strip()
+    description_all = title + '<p>' + description + '</p>'
+
+    try:
+        tags = patterns
+        description = highlight(tags, description_all)
+    except:
+        description = HTML(description_all)
+
+    return description

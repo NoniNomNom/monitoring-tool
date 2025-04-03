@@ -81,5 +81,3 @@ def make_keywords_list():
     with open(app_dir + "/keywords.json", "w") as outfile:
         outfile.write(list)
     print("FILE WRITTEN")
-
-make_feed_dict()
