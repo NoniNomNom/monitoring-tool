@@ -275,9 +275,11 @@ def server(input, output, session):
 
         date_limit = rval_date_limit().strftime("%d-%m-%Y - %H:%M")
 
-        df = df[df['Date'] > date_limit]
-
         df['Date'] = df['Date'].dt.strftime("%d-%m-%Y - %H:%M")
+
+        print(df['Date'])
+
+        df = df[df['Date'] > date_limit]
 
         rval_filtered_table.set(df)
         return render.DataGrid(df.iloc[:,[0,1,9]], 
