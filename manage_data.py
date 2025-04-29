@@ -86,7 +86,7 @@ def parse_and_append(feed_url, feed_name, all_data = None, error = 0, out_time =
                 continue
             else :
                 date = entry.published_parsed if 'published_parsed' in entry else None
-                if date and datetime(*date[:6]) < back or date == None:
+                if date and datetime(*date[:6]) < back or date is None:
                     print("OUT OF TIME")
                     out_time = out_time + 1
                     continue
@@ -126,7 +126,8 @@ def load_feeds(nloads = 0):
         content, all_data_file = get_json_content("all_data.json")
         all_data = pd.DataFrame(content)
 
-    except:
+    except Exception as e:
+        print(e)
         all_data = None
         print("no df")
 
@@ -153,7 +154,8 @@ def load_feeds(nloads = 0):
         try:
             parsed_entries, parsed_feed = parse_and_append(feed_url, feed_name, all_data)
             parsed_table.extend(parsed_entries)
-        except:
+        except Exception as e:
+            print(e)
             feed_broken = feed_broken + 1
             feeds_broken.append(feed_name)
             continue

@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import json
 from datetime import datetime
@@ -104,15 +103,16 @@ def server(input, output, session):
     try:
         saved_rows, kept_rows_file = get_json_content("kept_rows.json")
         saved_rows = pd.DataFrame(saved_rows)
-    except: 
+    except Exception as e:
+        print(e) 
         saved_rows = None
 
     try:
         content, all_data_file = get_json_content("all_data.json")
         parsed_df = pd.DataFrame(content)
         
-    except:
-        print("initialization error")
+    except Exception as e:
+        print(e)
         parsed_df = pd.DataFrame()
 
     # initialisation des valeurs réactives
@@ -139,14 +139,14 @@ def server(input, output, session):
     @reactive.event(input.switch_rss)
     def _():
         value = input.switch_rss()
-        if value == True:
+        if value:
             feeds, file = get_json_content("feeds_dict.json")
             feeds = list(feeds["feed_title"])
             ui.update_checkbox_group(
                 "checkbox_feeds",
                 selected=feeds,
             )
-        elif value == False:
+        elif not value:
             ui.update_checkbox_group(
                 "checkbox_feeds",
                 selected=[],
@@ -156,7 +156,7 @@ def server(input, output, session):
     @reactive.event(input.switch_webscrap)
     def _():
         value = input.switch_webscrap()
-        if value == True:
+        if value:
             df = get_sheet_content("1bN_JcxcndhdX_QL9P2OtPZsyoCmxYJ7SOmZDHga_OCI", "DB_ACTU")
             sites = list(df["Feed"].unique())
             print(sites)
@@ -164,7 +164,7 @@ def server(input, output, session):
                 "checkbox_sites",
                 selected=sorted(sites),
             )
-        elif value == False:
+        elif not value:
             ui.update_checkbox_group(
                 "checkbox_sites",
                 selected=[],
@@ -174,7 +174,7 @@ def server(input, output, session):
     @reactive.event(input.switch_keys)
     def _():
         value = input.switch_keys()
-        if value == True:
+        if value:
             keywords, file = get_json_content("keywords.json")
             ui.update_checkbox_group(
                 "checkbox_keys",
@@ -182,7 +182,7 @@ def server(input, output, session):
             )
             ui.update_switch("switch_keys",
                              label="Deselect all")
-        elif value == False:
+        elif not value:
             ui.update_checkbox_group(
                 "checkbox_keys",
                 selected=[],
@@ -212,7 +212,8 @@ def server(input, output, session):
                         print(match)
                         print(match.matched)
                         near_keys.append(match.matched)
-                except:
+                except Exception as e:
+                    print(e)
                     print("error while matching")
         rval_parsed_table.set(df)
         rval_near_keywords.set(near_keys)
@@ -363,7 +364,8 @@ def server(input, output, session):
                 keywords_selected, file = get_json_content("keywords_selected.json")
                 print("json loaded")
                 
-            except:
+            except Exception as e:
+                print(e)
                 keywords_selected = None
 
             ui.update_checkbox_group(  
@@ -430,7 +432,8 @@ def server(input, output, session):
                 feeds_selected, file = get_json_content("feeds_selected.json")
                 print("json loaded")
                 
-            except:
+            except Exception as e:
+                print(e)
                 feeds_selected = None
 
             print(feeds_selected)
@@ -441,7 +444,8 @@ def server(input, output, session):
                 choices = sorted(feeds),
                 selected = feeds_selected
                 )
-        except:
+        except Exception as e:
+            print(e)
             checkboxes_feeds = ui.input_checkbox_group(  
                 id = "checkbox_feeds",  
                 label = "No feed",  
@@ -464,7 +468,8 @@ def server(input, output, session):
                 choices = sorted(sites),
                 selected = sorted(sites)
                 )
-        except:
+        except Exception as e:
+            print(e)
             checkboxes_feeds = ui.input_checkbox_group(  
                 id = "checkbox_sites",  
                 label = "No site",  
@@ -488,7 +493,8 @@ def server(input, output, session):
             return render.DataGrid(parsed_df.iloc[:,[0,1,8,9]], 
                                     row_selection_mode="single",
                                     width="100%")
-        except:
+        except Exception as e:
+            print(e)
             return "Could not parse feed"
     
     @reactive.effect
