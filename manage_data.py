@@ -67,9 +67,6 @@ def get_sheet_content(sheet_id, sheet_name):
 
     return df_webscraped
 
-webscraped_df = get_sheet_content("1bN_JcxcndhdX_QL9P2OtPZsyoCmxYJ7SOmZDHga_OCI", "DB_ACTU")
-print(webscraped_df)
-
 def parse_and_append(feed_url, feed_name, all_data = None, error = 0, out_time = 0):
 
         parsed_feed = feedparser.parse(feed_url)
